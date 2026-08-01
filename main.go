@@ -24,7 +24,7 @@ import (
 
 func main() {}
 
-var pluginVersion = "0.0.0-dev"
+var pluginVersion = "1.0.0"
 
 // ---------------------------------------------------------------------------
 // Configuration
