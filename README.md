@@ -1,4 +1,4 @@
-# multimodal-router
+# CPA Multimodal Router Plugin
 
 多模态感知动态模型路由组件 —— 一个 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (CPA) 原生插件。
 
