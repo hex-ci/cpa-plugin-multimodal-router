@@ -281,7 +281,11 @@ func detectMultimodal(body []byte) multimodalResult {
 	return multimodalResult{Multimodal: true, Kinds: kinds}
 }
 
-// detectMessageMultimodal.
+// detectMessageMultimodal deep-scans a single message for multimodal content.
+//
+// The walk is recursive: multimodal blocks nested inside tool_result.content
+// (e.g. an "image" block returned by a screenshot tool) or any other wrapping
+// structure are detected, not just blocks at the top level of message.content.
 //
 // OpenAI format:
 //  1. content array contains a block with type "image_url"
@@ -293,32 +297,58 @@ func detectMultimodal(body []byte) multimodalResult {
 //  2. content array contains a block with type "document"
 //  3. content array contains a block with type "image_url"
 //  4. the message block itself carries a source property object
+//  5. a tool_result block whose content array contains an "image"/"document"
+//     block (returned by tools such as screenshot capture)
 func detectMessageMultimodal(msg map[string]any) []string {
 	var kinds []string
-	for _, key := range []string{"image_url", "input_audio"} {
-		if _, ok := msg[key]; ok {
-			kinds = append(kinds, key)
+	seen := make(map[string]bool)
+	add := func(k string) {
+		if k != "" && !seen[k] {
+			seen[k] = true
+			kinds = append(kinds, k)
 		}
 	}
-	if _, ok := msg["source"]; ok {
-		kinds = append(kinds, "source")
-	}
-	content, ok := msg["content"].([]any)
-	if !ok {
-		return kinds
-	}
-	for _, c := range content {
-		block, ok := c.(map[string]any)
-		if !ok {
-			continue
-		}
-		typ, _ := block["type"].(string)
-		switch typ {
-		case "image_url", "input_audio", "image", "document":
-			kinds = append(kinds, typ)
-		}
-	}
+	walkMultimodal(msg, add)
 	return kinds
+}
+
+// walkMultimodal recursively walks the value tree and reports any multimodal
+// block or property it encounters. JSON unmarshals to a tree of map / []any /
+// scalar, so there is no risk of cycles; depth is bounded by the request size.
+func walkMultimodal(v any, add func(string)) {
+	switch x := v.(type) {
+	case map[string]any:
+		// A block whose type is a known multimodal content type.
+		if typ, _ := x["type"].(string); typ != "" {
+			switch typ {
+			case "image_url", "input_audio", "image", "document":
+				add(typ)
+			}
+		}
+		// A message or block carrying a multimodal payload property directly.
+		if _, ok := x["image_url"]; ok {
+			add("image_url")
+		}
+		if _, ok := x["input_audio"]; ok {
+			add("input_audio")
+		}
+		// Claude image/document blocks (and a bare top-level source) carry a
+		// "source" object. Skip when the node is already classified by its
+		// type so the kind list does not grow with redundant "source" entries.
+		if _, ok := x["source"]; ok {
+			typ, _ := x["type"].(string)
+			if typ != "image" && typ != "document" && typ != "image_url" && typ != "input_audio" {
+				add("source")
+			}
+		}
+		for _, child := range x {
+			walkMultimodal(child, add)
+		}
+	case []any:
+		for _, item := range x {
+			walkMultimodal(item, add)
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------

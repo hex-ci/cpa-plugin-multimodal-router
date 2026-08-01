@@ -196,6 +196,36 @@ func TestDetectMultimodal(t *testing.T) {
 			body: `{"model":"gpt-4o","messages":[]}`,
 			want: false,
 		},
+		{
+			name: "claude image nested in tool_result.content",
+			body: `{"model":"claude-opus-5","messages":[{"role":"user","content":[{"type":"text","text":"take a screenshot"},{"type":"tool_result","tool_use_id":"toolu_01","content":[{"type":"text","text":"Screenshot"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgoAAA"}}]}]}]}`,
+			want: true,
+		},
+		{
+			name: "openai image_url nested in tool message content",
+			body: `{"model":"gpt-4o","messages":[{"role":"user","content":[{"type":"text","text":"show screen"},{"type":"tool_result","tool_use_id":"call_1","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgo"}}]}]}]}`,
+			want: true,
+		},
+		{
+			name: "claude document nested in tool_result.content",
+			body: `{"model":"claude-sonnet-4","messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_02","content":[{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"JVBER"}}]}]}]}`,
+			want: true,
+		},
+		{
+			name: "image nested two levels in tool_result within assistant tool_use reply chain",
+			body: `{"model":"claude-opus-5","messages":[{"role":"user","content":"run it"},{"role":"assistant","content":[{"type":"tool_use","id":"toolu_03","name":"capture","input":{"path":"x"}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_03","content":[{"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":"/9j/4AAQ"}}]}]}]}`,
+			want: true,
+		},
+		{
+			name: "tool_result with only text content is not multimodal",
+			body: `{"model":"claude-opus-5","messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_04","content":[{"type":"text","text":"just text result"}]}]}]}`,
+			want: false,
+		},
+		{
+			name: "openai image_url nested as message-level content array of tool calls response",
+			body: `{"model":"gpt-4o","messages":[{"role":"tool","tool_call_id":"call_5","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]}]}`,
+			want: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
